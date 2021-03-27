@@ -13,8 +13,12 @@ repositories {
 def runeLiteVersion = '1.7.3'
 
 dependencies {
+    implementation('io.ably:ably-java:1.2.5')
+            {
+                exclude group: 'com.google.code.gson'
+            }
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
-    compile 'io.ably:ably-java:1.2.5'
+
 	compileOnly 'org.projectlombok:lombok:1.18.4'
 	annotationProcessor 'org.projectlombok:lombok:1.18.4'
 
