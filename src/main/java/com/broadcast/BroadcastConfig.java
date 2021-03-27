@@ -1,8 +1,10 @@
 package com.broadcast;
 
+import java.awt.Color;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.ui.JagexColors;
 
 @ConfigGroup("broadcast")
 public interface BroadcastConfig extends Config
@@ -44,5 +46,15 @@ public interface BroadcastConfig extends Config
 	default boolean clanBroadcastReceive()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = "broadcastColour",
+		name = "Broadcast colour",
+		description = "The colour the broadcast should appear in"
+	)
+	default Color broadcastColour()
+	{
+		return JagexColors.CHAT_FC_TEXT_OPAQUE_BACKGROUND;
 	}
 }
