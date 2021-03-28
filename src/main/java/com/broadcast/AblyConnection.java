@@ -53,15 +53,21 @@ public class AblyConnection
 
 	private final HashMap<String, ArrayList<String>> previousMessages = new HashMap<>();
 
+	private final String DEFAULT_KEY = "FJ0Xqw.k0vt4Q:_SMrRHML8qEIqm5s";
+	// Publish key is only used for global app due to additional filtering functionality
+	private final String DEFAULT_PUBLISH_KEY = "FJ0Xqw.AOiULQ:PZOrlbospQr4h90h";
+
 	@Inject
 	ChatMessageManager chatMessageManager;
 
-	private AblyRealtime ablyRealtime;
-	private Channel ablyClanChannel;
+	private AblyRealtime ablyRealtimePublish;
+	private AblyRealtime ablyRealtimeSubscribe;
+	private Channel ablyClanChannelSubscribe;
+	private Channel ablyClanChannelPublish;
 	private final BroadcastConfig config;
 
-	private final String CHANNEL_NAME_PREFIX = "broadcast";
-
+	private final String VALID_SYMBOL_TEXT = "<img=(33|2|10|3)>";
+	private final String VALID_USERNAME = "[a-zA-Z\\d- ]{1,12}";
 	private String VALID_REGEX_PET_TEXT;
 	private String VALID_SKILL_TEXT;
 
@@ -74,16 +80,17 @@ public class AblyConnection
 		createSkillRegex();
 	}
 
-	public void startConnection() throws AblyException
+	public void startConnection()
 	{
-		ablyRealtime = new AblyRealtime(config.apiKey());
-		ablyClanChannel = ablyRealtime.channels.get(CHANNEL_NAME_PREFIX);
+		setupAblyInstance();
+		setupChannels();
 		setupAblySubscriptions();
 	}
 
 	public void closeConnection()
 	{
-		ablyRealtime.connection.close();
+		ablyRealtimePublish.connection.close();
+		ablyRealtimeSubscribe.connection.close();
 	}
 
 	public void publishMessage(String notification)
@@ -96,11 +103,12 @@ public class AblyConnection
 		try
 		{
 			JsonObject msg = io.ably.lib.util.JsonUtils.object()
-				.add("username", getAccountIcon() + client.getLocalPlayer().getName())
+				.add("symbol", getAccountIcon())
+				.add("username", client.getLocalPlayer().getName())
 				.add("notification", notification).toJson();
 			if (config.clanBroadcast())
 			{
-				ablyClanChannel.publish("event", msg);
+				ablyClanChannelPublish.publish("event", msg);
 			}
 		}
 		catch (AblyException err)
@@ -129,19 +137,29 @@ public class AblyConnection
 				final ChatMessageBuilder chatMessageBuilder = new ChatMessageBuilder()
 					.append(config.broadcastColour(), msg.notification);
 
-				if (msg.username.length() <= 20 && (
-					msg.notification.matches(VALID_REGEX_PET_TEXT) ||
-						msg.notification.matches(VALID_SKILL_TEXT)
-				)
-				)
+				if (msg.username.length() > 12 || !msg.username.matches(VALID_USERNAME))
 				{
-					chatMessageManager.queue(QueuedMessage.builder()
-						.type(ChatMessageType.FRIENDSCHAT)
-						.name(msg.username)
-						.sender(config.groupName() + " Broadcast")
-						.runeLiteFormattedMessage(chatMessageBuilder.build())
-						.build());
+					return;
 				}
+
+				if (!msg.symbol.matches(VALID_SYMBOL_TEXT) && !msg.symbol.equals(""))
+				{
+					return;
+				}
+
+				if (!msg.notification.matches(VALID_REGEX_PET_TEXT) &&
+					!msg.notification.matches(VALID_SKILL_TEXT))
+				{
+					return;
+				}
+
+				chatMessageManager.queue(QueuedMessage.builder()
+					.type(ChatMessageType.FRIENDSCHAT)
+					.name(msg.symbol + msg.username)
+					.sender(config.groupName() + " Broadcast")
+					.runeLiteFormattedMessage(chatMessageBuilder.build())
+					.build());
+
 			}
 			catch (ClassCastException ignored)
 			{
@@ -151,17 +169,43 @@ public class AblyConnection
 
 	public void connectToNewAblyAccount()
 	{
-		ablyRealtime.connection.close();
+		ablyRealtimePublish.connection.close();
+		ablyRealtimeSubscribe.connection.close();
+
+		setupAblyInstance();
+		setupChannels();
+		setupAblySubscriptions();
+	}
+
+	private void setupAblyInstance()
+	{
 		try
 		{
-			ablyRealtime = new AblyRealtime(config.apiKey());
-			ablyClanChannel.unsubscribe();
-			ablyClanChannel = ablyRealtime.channels.get(CHANNEL_NAME_PREFIX);
-			setupAblySubscriptions();
-		}
-		catch (AblyException ignored)
-		{
+			ablyRealtimeSubscribe = new AblyRealtime(config.apiKey());
+			if (DEFAULT_KEY.equals(config.apiKey()))
+			{
+				ablyRealtimePublish = new AblyRealtime(DEFAULT_PUBLISH_KEY);
+			}
+			else
+			{
+				ablyRealtimePublish = new AblyRealtime(config.apiKey());
+			}
+		} catch(AblyException ignored) {}
+	}
 
+	public void setupChannels()
+	{
+		String CHANNEL_NAME_PREFIX = "broadcast";
+
+		if (config.apiKey().equals(DEFAULT_KEY))
+		{
+			ablyClanChannelPublish = ablyRealtimePublish.channels.get(CHANNEL_NAME_PREFIX + ":publish");
+			ablyClanChannelSubscribe = ablyRealtimeSubscribe.channels.get(CHANNEL_NAME_PREFIX + ":subscribe");
+		}
+		else
+		{
+			ablyClanChannelPublish = ablyRealtimePublish.channels.get(CHANNEL_NAME_PREFIX);
+			ablyClanChannelSubscribe = ablyRealtimeSubscribe.channels.get(CHANNEL_NAME_PREFIX);
 		}
 	}
 
@@ -169,10 +213,10 @@ public class AblyConnection
 	{
 		try
 		{
-			ablyClanChannel.unsubscribe();
+			ablyClanChannelSubscribe.unsubscribe();
 			if (config.clanBroadcastReceive())
 			{
-				ablyClanChannel.subscribe((Channel.MessageListener) this::handleAblyMessage);
+				ablyClanChannelSubscribe.subscribe((Channel.MessageListener) this::handleAblyMessage);
 			}
 		}
 		catch (AblyException e)
@@ -205,6 +249,10 @@ public class AblyConnection
 
 	private String getAccountIcon()
 	{
+		if (client.getWorldType().contains( WorldType.LEAGUE))
+		{
+			return "<img=33>";
+		}
 		switch (client.getAccountType())
 		{
 			case IRONMAN:
@@ -213,10 +261,6 @@ public class AblyConnection
 				return "<img=10>";
 			case ULTIMATE_IRONMAN:
 				return "<img=3>";
-		}
-		if (client.getWorldType().contains( WorldType.LEAGUE))
-		{
-			return "<img=33>";
 		}
 
 		return "";

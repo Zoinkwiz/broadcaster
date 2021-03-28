@@ -27,11 +27,13 @@ package com.broadcast;
 public class BroadcastMessage
 {
 	public String username;
+	public String symbol;
 	public String notification;
 
-	public BroadcastMessage(String username, String notification)
+	public BroadcastMessage(String username, String symbol, String notification)
 	{
 		this.username = username;
+		this.symbol = symbol;
 		this.notification = notification;
 	}
 }
