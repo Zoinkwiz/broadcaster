@@ -33,6 +33,8 @@ import io.ably.lib.realtime.AblyRealtime;
 import io.ably.lib.realtime.Channel;
 import io.ably.lib.types.AblyException;
 import io.ably.lib.types.Message;
+import java.util.ArrayList;
+import java.util.HashMap;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -48,6 +50,8 @@ import net.runelite.client.chat.QueuedMessage;
 public class AblyConnection
 {
 	private final Client client;
+
+	private final HashMap<String, ArrayList<String>> previousMessages = new HashMap<>();
 
 	@Inject
 	ChatMessageManager chatMessageManager;
@@ -113,6 +117,15 @@ public class AblyConnection
 			{
 				Gson gson = new Gson();
 				BroadcastMessage msg = gson.fromJson((JsonElement) message.data, BroadcastMessage.class);
+
+				previousMessages.computeIfAbsent(msg.username, k -> new ArrayList<>());
+				// If someone is manually spamming the same message during a session, block it
+				if (previousMessages.get(msg.username).contains(msg.notification))
+				{
+					return;
+				}
+				previousMessages.get(msg.username).add(msg.notification);
+
 				final ChatMessageBuilder chatMessageBuilder = new ChatMessageBuilder()
 					.append(config.broadcastColour(), msg.notification);
 

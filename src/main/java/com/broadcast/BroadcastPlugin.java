@@ -25,12 +25,10 @@
 package com.broadcast;
 
 import com.google.inject.Provides;
-import java.util.HashMap;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.GameState;
-import net.runelite.api.Skill;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.StatChanged;
@@ -60,8 +58,6 @@ public class BroadcastPlugin extends Plugin
 	private static final String PET_FOLLOWING_MESSAGE = "You have a funny feeling like you're being followed";
 	private static final String PET_INVENTORY_MESSAGE = "You feel something weird sneaking into your backpack";
 	private static final String PET_POTENTIAL_MESSAGE = "You have a funny feeling like you would have been followed";
-
-	HashMap<Skill, Integer> currentLevels = new HashMap<>();
 
 	@Override
 	protected void startUp() throws Exception

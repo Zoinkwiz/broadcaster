@@ -85,7 +85,7 @@ public class SkillAchievements
 			}
 		}
 
-		if (Experience.MAX_REAL_LEVEL <= statChanged.getXp())
+		if (Experience.MAX_SKILL_XP <= statChanged.getXp())
 		{
 			ablyConnection.publishMessage("Has achieved 200m exp in " + skillChanged.getName() + "!");
 		}
