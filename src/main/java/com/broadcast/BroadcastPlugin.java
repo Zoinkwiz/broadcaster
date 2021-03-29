@@ -77,15 +77,18 @@ public class BroadcastPlugin extends Plugin
 	{
 		if (event.getGroup().equals("broadcast"))
 		{
-			if (event.getKey().equals("clanBroadcastReceive"))
+			if (event.getKey().equals("globalBroadcastReceive"))
 			{
-				ablyConnection.setupAblySubscriptions();
+				ablyConnection.setupAblyGlobalSubscription();
 			}
-		}
-
-		if (event.getKey().equals("apiKey"))
-		{
-			ablyConnection.connectToNewAblyAccount();
+			if (event.getKey().equals("groupBroadcastReceive"))
+			{
+				ablyConnection.setupAblyPrivateSubscription();
+			}
+			if (event.getKey().equals("apiKey"))
+			{
+				ablyConnection.connectToNewAblyAccountPrivate();
+			}
 		}
 	}
 

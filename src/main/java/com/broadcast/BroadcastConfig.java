@@ -4,56 +4,112 @@ import java.awt.Color;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
 import net.runelite.client.ui.JagexColors;
 
 @ConfigGroup("broadcast")
 public interface BroadcastConfig extends Config
 {
+	@ConfigSection(
+		position = 1,
+		name = "Global broadcasts",
+		description = "Options for global broadcasts"
+	)
+	String globalBroadcastsSection = "globalBroadcastsSection";
+
+	@ConfigItem(
+		keyName = "globalBroadcastSend",
+		name = "Send global broadcasts",
+		description = "Broadcast drops you get to the global group",
+		section = globalBroadcastsSection
+	)
+	default boolean globalBroadcastSend()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "globalBroadcastReceive",
+		name = "Receive global broadcasts",
+		description = "Receive broadcast from the global group",
+		section = globalBroadcastsSection
+	)
+	default boolean globalBroadcastReceive()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "globalBroadcastColour",
+		name = "Global broadcast colour",
+		description = "The colour the global broadcasts should appear in",
+		section = globalBroadcastsSection
+	)
+	default Color globalBroadcastColour()
+	{
+		return JagexColors.CHAT_FC_TEXT_OPAQUE_BACKGROUND;
+	}
+
+	// Group
+	@ConfigSection(
+		position = 2,
+		name = "Private group broadcasts",
+		closedByDefault = true,
+		description = "Options for private broadcasts"
+	)
+	String groupBroadcastsSection = "groupBroadcastsSection";
+
 	@ConfigItem(
 		keyName = "apiKey",
 		name = "Ably API key",
-		description = "Key is used to connect you to the appropriate messages"
+		description = "Put a key here to use a private group's broadcasts",
+		section = groupBroadcastsSection
 	)
 	default String apiKey()
 	{
-		return "FJ0Xqw.k0vt4Q:_SMrRHML8qEIqm5s";
+		return "";
 	}
 
 	@ConfigItem(
 		keyName = "groupName",
 		name = "Name of group",
-		description = "Choose a name to identify this group"
+		description = "Choose a name to identify your group",
+		section = groupBroadcastsSection
 	)
 	default String groupName()
 	{
-		return "Global";
+		return "Clan";
 	}
+
 	@ConfigItem(
-		keyName = "clanBroadcast",
-		name = "Send broadcasts",
-		description = "Broadcast drops you get to the group"
+		keyName = "groupBroadcastSend",
+		name = "Send group broadcasts",
+		description = "Broadcast drops you get to your private group",
+		section = groupBroadcastsSection
 	)
-	default boolean clanBroadcast()
+	default boolean groupBroadcastSend()
 	{
 		return true;
 	}
 
 	@ConfigItem(
-		keyName = "clanBroadcastReceive",
-		name = "Receive broadcasts",
-		description = "Receive broadcast from players in your current clan chat"
+		keyName = "groupBroadcastReceive",
+		name = "Receive group broadcasts",
+		description = "Receive broadcast from the private group",
+		section = groupBroadcastsSection
 	)
-	default boolean clanBroadcastReceive()
+	default boolean groupBroadcastReceive()
 	{
 		return true;
 	}
 
 	@ConfigItem(
-		keyName = "broadcastColour",
-		name = "Broadcast colour",
-		description = "The colour the broadcast should appear in"
+		keyName = "groupBroadcastColour",
+		name = "Group broadcast colour",
+		description = "The colour the private group broadcasts should appear in",
+		section = groupBroadcastsSection
 	)
-	default Color broadcastColour()
+	default Color groupBroadcastColour()
 	{
 		return JagexColors.CHAT_FC_TEXT_OPAQUE_BACKGROUND;
 	}

@@ -32,7 +32,9 @@ import com.google.inject.Singleton;
 import io.ably.lib.realtime.AblyRealtime;
 import io.ably.lib.realtime.Channel;
 import io.ably.lib.types.AblyException;
+import io.ably.lib.types.ClientOptions;
 import io.ably.lib.types.Message;
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashMap;
 import lombok.extern.slf4j.Slf4j;
@@ -53,18 +55,21 @@ public class AblyConnection
 
 	private final HashMap<String, ArrayList<String>> previousMessages = new HashMap<>();
 
-	private final String DEFAULT_KEY = "FJ0Xqw.k0vt4Q:_SMrRHML8qEIqm5s";
-	// Publish key is only used for global app due to additional filtering functionality
-	private final String DEFAULT_PUBLISH_KEY = "FJ0Xqw.AOiULQ:PZOrlbospQr4h90h";
+	private final String CHANNEL_NAME_PREFIX = "broadcast";
 
 	@Inject
 	ChatMessageManager chatMessageManager;
 
-	private AblyRealtime ablyRealtimePublish;
-	private AblyRealtime ablyRealtimeSubscribe;
-	private Channel ablyClanChannelSubscribe;
-	private Channel ablyClanChannelPublish;
 	private final BroadcastConfig config;
+
+	// Global broadcasts
+	private AblyRealtime ablyGlobalRealtime;
+	private Channel ablyGlobalChannelSubscribe;
+	private Channel ablyGlobalChannelPublish;
+
+	// Private broadcasts
+	private AblyRealtime ablyPrivateRealtime;
+	private Channel ablyPrivateChannel;
 
 	private final String VALID_SYMBOL_TEXT = "<img=(33|2|10|3)>";
 	private final String VALID_USERNAME = "[a-zA-Z\\d- ]{1,12}";
@@ -82,15 +87,15 @@ public class AblyConnection
 
 	public void startConnection()
 	{
-		setupAblyInstance();
+		setupAblyInstances();
 		setupChannels();
 		setupAblySubscriptions();
 	}
 
 	public void closeConnection()
 	{
-		ablyRealtimePublish.connection.close();
-		ablyRealtimeSubscribe.connection.close();
+		ablyGlobalRealtime.connection.close();
+		ablyPrivateRealtime.connection.close();
 	}
 
 	public void publishMessage(String notification)
@@ -106,9 +111,13 @@ public class AblyConnection
 				.add("symbol", getAccountIcon())
 				.add("username", client.getLocalPlayer().getName())
 				.add("notification", notification).toJson();
-			if (config.clanBroadcast())
+			if (config.globalBroadcastSend())
 			{
-				ablyClanChannelPublish.publish("event", msg);
+				ablyGlobalChannelPublish.publish("event", msg);
+			}
+			if (config.groupBroadcastSend())
+			{
+				ablyPrivateChannel.publish("event", msg);
 			}
 		}
 		catch (AblyException err)
@@ -117,106 +126,155 @@ public class AblyConnection
 		}
 	}
 
-	private void handleAblyMessage(Message message)
+	private void handleGlobalMessage(Message message)
+	{
+		handleAblyMessage(message, config.globalBroadcastColour(), "Global");
+	}
+
+	private void handlePrivateMessage(Message message)
+	{
+		handleAblyMessage(message, config.groupBroadcastColour(), config.groupName());
+	}
+
+	private void handleAblyMessage(Message message, Color color, String broadcastName)
 	{
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
-			try
+			Gson gson = new Gson();
+			BroadcastMessage msg = gson.fromJson((JsonElement) message.data, BroadcastMessage.class);
+
+			previousMessages.computeIfAbsent(msg.username, k -> new ArrayList<>());
+			// If someone is manually spamming the same message during a session, block it
+			if (previousMessages.get(msg.username).contains(msg.notification))
 			{
-				Gson gson = new Gson();
-				BroadcastMessage msg = gson.fromJson((JsonElement) message.data, BroadcastMessage.class);
-
-				previousMessages.computeIfAbsent(msg.username, k -> new ArrayList<>());
-				// If someone is manually spamming the same message during a session, block it
-				if (previousMessages.get(msg.username).contains(msg.notification))
-				{
 					return;
-				}
-				previousMessages.get(msg.username).add(msg.notification);
-
-				final ChatMessageBuilder chatMessageBuilder = new ChatMessageBuilder()
-					.append(config.broadcastColour(), msg.notification);
-
-				if (msg.username.length() > 12 || !msg.username.matches(VALID_USERNAME))
-				{
-					return;
-				}
-
-				if (!msg.symbol.matches(VALID_SYMBOL_TEXT) && !msg.symbol.equals(""))
-				{
-					return;
-				}
-
-				if (!msg.notification.matches(VALID_REGEX_PET_TEXT) &&
-					!msg.notification.matches(VALID_SKILL_TEXT))
-				{
-					return;
-				}
-
-				chatMessageManager.queue(QueuedMessage.builder()
-					.type(ChatMessageType.FRIENDSCHAT)
-					.name(msg.symbol + msg.username)
-					.sender(config.groupName() + " Broadcast")
-					.runeLiteFormattedMessage(chatMessageBuilder.build())
-					.build());
-
 			}
-			catch (ClassCastException ignored)
+			previousMessages.get(msg.username).add(msg.notification);
+
+			final ChatMessageBuilder chatMessageBuilder = new ChatMessageBuilder()
+				.append(color, msg.notification);
+
+			if (msg.username.length() > 12 || !msg.username.matches(VALID_USERNAME))
 			{
+				return;
 			}
+
+			if (!msg.symbol.matches(VALID_SYMBOL_TEXT) && !msg.symbol.equals(""))
+			{
+				return;
+			}
+
+			if (!msg.notification.matches(VALID_REGEX_PET_TEXT) &&
+				!msg.notification.matches(VALID_SKILL_TEXT))
+			{
+				return;
+			}
+
+			chatMessageManager.queue(QueuedMessage.builder()
+				.type(ChatMessageType.FRIENDSCHAT)
+				.name(msg.symbol + msg.username)
+				.sender(broadcastName + " Broadcast")
+				.runeLiteFormattedMessage(chatMessageBuilder.build())
+				.build());
+
 		}
 	}
 
-	public void connectToNewAblyAccount()
-	{
-		ablyRealtimePublish.connection.close();
-		ablyRealtimeSubscribe.connection.close();
 
-		setupAblyInstance();
-		setupChannels();
-		setupAblySubscriptions();
+	public void connectToNewAblyAccountPrivate()
+	{
+		ablyPrivateRealtime.connection.close();
+
+		setupAblyPrivateInstance();
+		setupPrivateChannel();
+		setupAblyPrivateSubscription();
 	}
 
-	private void setupAblyInstance()
+	private void setupAblyInstances()
+	{
+		setupAblyGlobalInstances();
+		setupAblyPrivateInstance();
+	}
+
+	private void setupAblyGlobalInstances()
 	{
 		try
 		{
-			ablyRealtimeSubscribe = new AblyRealtime(config.apiKey());
-			if (DEFAULT_KEY.equals(config.apiKey()))
+			ClientOptions clientOptions = new ClientOptions();
+			clientOptions.authUrl = "https://runelite-broadcaster.herokuapp.com/token";
+			ablyGlobalRealtime = new AblyRealtime(clientOptions);
+		}
+		catch (AblyException e)
+		{
+			e.printStackTrace();
+		}
+	}
+
+	private void setupAblyPrivateInstance()
+	{
+		try
+		{
+			if (!config.apiKey().equals(""))
 			{
-				ablyRealtimePublish = new AblyRealtime(DEFAULT_PUBLISH_KEY);
+				ablyPrivateRealtime = new AblyRealtime(config.apiKey());
 			}
-			else
-			{
-				ablyRealtimePublish = new AblyRealtime(config.apiKey());
-			}
-		} catch(AblyException ignored) {}
+		}
+		catch (AblyException e)
+		{
+			e.printStackTrace();
+		}
 	}
 
 	public void setupChannels()
 	{
-		String CHANNEL_NAME_PREFIX = "broadcast";
+		setupGlobalChannels();
+		setupPrivateChannel();
+	}
 
-		if (config.apiKey().equals(DEFAULT_KEY))
+	private void setupGlobalChannels()
+	{
+		ablyGlobalChannelPublish = ablyGlobalRealtime.channels.get(CHANNEL_NAME_PREFIX + ":publish");
+		ablyGlobalChannelSubscribe = ablyGlobalRealtime.channels.get(CHANNEL_NAME_PREFIX + ":subscribe");
+	}
+
+	private void setupPrivateChannel()
+	{
+		if (ablyPrivateRealtime != null && !config.apiKey().equals(""))
 		{
-			ablyClanChannelPublish = ablyRealtimePublish.channels.get(CHANNEL_NAME_PREFIX + ":publish");
-			ablyClanChannelSubscribe = ablyRealtimeSubscribe.channels.get(CHANNEL_NAME_PREFIX + ":subscribe");
-		}
-		else
-		{
-			ablyClanChannelPublish = ablyRealtimePublish.channels.get(CHANNEL_NAME_PREFIX);
-			ablyClanChannelSubscribe = ablyRealtimeSubscribe.channels.get(CHANNEL_NAME_PREFIX);
+			ablyPrivateChannel = ablyPrivateRealtime.channels.get(CHANNEL_NAME_PREFIX);
 		}
 	}
 
 	public void setupAblySubscriptions()
 	{
+		setupAblyGlobalSubscription();
+		setupAblyPrivateSubscription();
+	}
+
+	public void setupAblyGlobalSubscription()
+	{
 		try
 		{
-			ablyClanChannelSubscribe.unsubscribe();
-			if (config.clanBroadcastReceive())
+			ablyGlobalChannelSubscribe.unsubscribe();
+			if (config.globalBroadcastReceive())
 			{
-				ablyClanChannelSubscribe.subscribe((Channel.MessageListener) this::handleAblyMessage);
+				ablyGlobalChannelSubscribe.subscribe((Channel.MessageListener) this::handleGlobalMessage);
+			}
+		}
+		catch (AblyException e)
+		{
+			e.printStackTrace();
+		}
+	}
+
+	public void setupAblyPrivateSubscription()
+	{
+		try
+		{
+			ablyPrivateChannel.unsubscribe();
+			if (config.groupBroadcastReceive())
+			{
+				ablyPrivateChannel.subscribe((Channel.MessageListener) this::handlePrivateMessage);
 			}
 		}
 		catch (AblyException e)
