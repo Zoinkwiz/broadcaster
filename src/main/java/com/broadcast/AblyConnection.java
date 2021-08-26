@@ -307,7 +307,7 @@ public class AblyConnection
 
 	private String getAccountIcon()
 	{
-		if (client.getWorldType().contains( WorldType.LEAGUE))
+		if (client.getWorldType().contains( WorldType.TOURNAMENT_WORLD))
 		{
 			return "<img=33>";
 		}
