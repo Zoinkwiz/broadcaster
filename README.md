@@ -1,6 +1,6 @@
 # Runelite Broadcasts
 
-This plugin allows for players to have broadcasts to other players for events that occur for them.
+This plugin allows for players to have broadcasts to other players who also have this plugin for events that occur for them.
 
 At present, this only supports broadcasts for pet drops and skill achievements (99s/200m).
 
